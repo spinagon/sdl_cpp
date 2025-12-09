@@ -29,7 +29,7 @@ public:
         mask.assign(w * h, false);
     }
 
-    virtual void fromSurface(SDL_Surface* surf) {};
+    virtual void fromSurface(SDL_Surface* surf)=0;
     virtual void toSurface(SDL_Surface* surf) {
         this->toPixels(surf->pixels, surf->pitch);
     }
@@ -41,7 +41,7 @@ public:
             SDL_UnlockTexture(tex);
         }
     }
-    virtual void toPixels(void* pixels, int pitch) {};
+    virtual void toPixels(void* pixels, int pitch)=0;
 };
 
 class FloatImage : public Image {
@@ -112,9 +112,12 @@ public:
             for (int x = 0; x < this->w; ++x) {
                 int idx = y * this->w + x;
                 
-                uint8_t r = (uint8_t)std::clamp(this->r[idx], 0.0, 255.0);
-                uint8_t g = (uint8_t)std::clamp(this->g[idx], 0.0, 255.0);
-                uint8_t b = (uint8_t)std::clamp(this->b[idx], 0.0, 255.0);
+                double rd, gd, bd;
+                hsluv2rgb(this->r[idx], this->g[idx], this->b[idx], &rd, &gd, &bd);
+
+                uint8_t r = (uint8_t)(rd * 255);
+                uint8_t g = (uint8_t)(gd * 255);
+                uint8_t b = (uint8_t)(bd * 255);
                 
                 row[x] = (255 << 24) | (r << 16) | (g << 8) | b;
             }
@@ -171,7 +174,7 @@ void applyBrush(Image& img, int mx, int my, bool clear=false) {
     }
 }
 
-void loadMask(FloatImage& img, FloatImage& mask) {
+void loadMask(Image& img, Image& mask) {
     for (int i = 0; i < img.h * img.w; ++i) {
         if (mask.r[i] == 0 && mask.g[i] == 0 && mask.b[i] == 0) {
             img.mask[i] = true;
