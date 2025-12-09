@@ -40,7 +40,7 @@ inline void unpack_rgba(uint32_t p, uint8_t &r, uint8_t &g, uint8_t &b) {
 
 int main(int argc, char* argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window *win = SDL_CreateWindow("", 800, 600, SDL_WINDOW_RESIZABLE);
+    SDL_Window *win = SDL_CreateWindow("", 1800, 1000, SDL_WINDOW_RESIZABLE);
     for (int i = 0; i < SDL_GetNumRenderDrivers(); ++i) {
         std::cout << SDL_GetRenderDriver(i) << "\n";
     }
@@ -94,14 +94,15 @@ int main(int argc, char* argv[]) {
         update_image(steps);
         SDL_RenderPresent(global_data.ren);
         if (SDL_GetTicks() - t > 1000) {
+            IMG_SavePNG(global_data.surf, std::format("d:/temp/sdl_cpp/frames/{:04d}.png", step).c_str());
             std::cout << count << " steps per second\n";
             printf("%d steps per iteration\n", steps);
             double its = count / (double)steps;
             printf("%d iterations per second\n", (int)round(its));
             std::cout << "Diff: " << std::endl << total_diff << std::endl;
             std::cout << "Radius: " << std::endl << radius << std::endl;
-            if (total_diff < 40000) {
-                radius += std::max(1, radius / 5);
+            if (true || total_diff < 150000) {
+                radius = step + 1;
             }
             int shortest = std::min(global_data.surf->h, global_data.surf->w);
             if (radius >= shortest) {

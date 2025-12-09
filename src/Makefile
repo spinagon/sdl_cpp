@@ -1,9 +1,9 @@
 CC = g++
-SDL_DIR = c:/prog/SDL3
-CFLAGS = -std=c++17 -Werror -O3
-CFLAGS += -I$(SDL_DIR)/i686-w64-mingw32/include/
+SDL_DIR ?= c:/prog/SDL3
+CFLAGS = -std=c++20 -Werror -O3
+CFLAGS += -I$(SDL_DIR)/x86_64-w64-mingw32/include/
 LDFLAGS = -lm
-LDFLAGS += -L$(SDL_DIR)/i686-w64-mingw32/lib -lmingw32 -lSDL3_test 
+LDFLAGS += -L$(SDL_DIR)/x86_64-w64-mingw32/lib -lmingw32 -lSDL3_test 
 LDFLAGS += -lSDL3 -lSDL3_image
 
 BUILD_DIR = .
