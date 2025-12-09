@@ -3,6 +3,7 @@ build/*
 *.o
 frames
 *.exe
+*.zip
 
 # keep empty dirs
 !**/.gitkeep

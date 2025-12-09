@@ -1,0 +1,27 @@
+CC = g++
+SDL2_DIR = c:/prog/SDL2
+SDL3_DIR = c:/prog/SDL3
+SDL_VERSION = SDL2
+CFLAGS = -std=c++17 -Werror -O3
+CFLAGS += -I$($(SDL_VERSION)_DIR)/i686-w64-mingw32/include/$(SDL_VERSION)
+LDFLAGS = -lm
+LDFLAGS += -L$($(SDL_VERSION)_DIR)/i686-w64-mingw32/lib -lmingw32 -l$(SDL_VERSION)_test 
+LDFLAGS += -l$(SDL_VERSION)main -l$(SDL_VERSION) -l$(SDL_VERSION)_image
+
+BUILD_DIR = ../build
+
+all: main.exe graph.exe sort.exe circle.exe clustering.exe
+
+%.exe: %.o
+	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
+
+%.o: %.cc
+	$(CC) -c $(CFLAGS) -o $@ $^
+
+run_%: %.exe
+	$(BUILD_DIR)/$(patsubst run_%,%.exe,$@)
+
+clean:
+	rm -rf *.o $(BUILD_DIR)/*
+
+rebuild: clean all
