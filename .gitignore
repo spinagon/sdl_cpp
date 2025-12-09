@@ -1,0 +1,8 @@
+# build artifacts
+build/*
+*.o
+frames
+*.exe
+
+# keep empty dirs
+!**/.gitkeep
