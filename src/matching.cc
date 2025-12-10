@@ -38,6 +38,13 @@ inline void unpack_rgba(uint32_t p, uint8_t &r, uint8_t &g, uint8_t &b) {
     b = (p >> 16) & 0xFF;
 }
 
+void save_image(int step) {
+    char s[100];
+    sprintf(s, "frames/%04d.png", step);
+    IMG_SavePNG(global_data.surf, s);
+
+}
+
 int main(int argc, char* argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *win = SDL_CreateWindow("", 800, 600, SDL_WINDOW_RESIZABLE);
@@ -100,8 +107,9 @@ int main(int argc, char* argv[]) {
             printf("%d iterations per second\n", (int)round(its));
             std::cout << "Diff: " << std::endl << total_diff << std::endl;
             std::cout << "Radius: " << std::endl << radius << std::endl;
-            if (total_diff < 40000) {
+            if (total_diff < global_data.surf->w * global_data.surf->h) {
                 radius += std::max(1, radius / 5);
+                save_image(step);
             }
             int shortest = std::min(global_data.surf->h, global_data.surf->w);
             if (radius >= shortest) {

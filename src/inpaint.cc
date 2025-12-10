@@ -161,13 +161,13 @@ void fillMask(Image& img) {
             int idx = y * w + x;
             if (img.mask[idx]) {
                 int y_up = y;
-                while (img.mask[y_up * w + x]) --y_up;
+                while (y_up > 0 && img.mask[y_up * w + x]) --y_up;
                 int y_down = y;
-                while (img.mask[y_down * w + x]) ++y_down;
+                while (y_down < h - 1 && img.mask[y_down * w + x]) ++y_down;
                 int x_left = x;
-                while (img.mask[y * w + x_left]) --x_left;
+                while (x_left > 0 && img.mask[y * w + x_left]) --x_left;
                 int x_right = x;
-                while (img.mask[y * w + x_right]) ++x_right;
+                while (x_right < w - 1 && img.mask[y * w + x_right]) ++x_right;
                 int n_up    = (y_up) * w + x;
                 int n_down  = (y_down) * w + x;
                 int n_left  = y * w + (x_left);
