@@ -6,11 +6,12 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-#include <SDL3/SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include "hsluv.h"
 
 // Brush settings
 int BRUSH_RADIUS = 15;
+bool useFill = false;
 
 class Image {
 public:
@@ -151,6 +152,46 @@ void saveImage(Image& img, const std::string& path) {
     SDL_DestroySurface(surf);
 }
 
+void fillMask(Image& img) {
+    int w = img.w;
+    int h = img.h;
+
+    for (int y = 1; y < h - 1; ++y) {
+        for (int x = 1; x < w - 1; ++x) {
+            int idx = y * w + x;
+            if (img.mask[idx]) {
+                int y_up = y;
+                while (img.mask[y_up * w + x]) --y_up;
+                int y_down = y;
+                while (img.mask[y_down * w + x]) ++y_down;
+                int x_left = x;
+                while (img.mask[y * w + x_left]) --x_left;
+                int x_right = x;
+                while (img.mask[y * w + x_right]) ++x_right;
+                int n_up    = (y_up) * w + x;
+                int n_down  = (y_down) * w + x;
+                int n_left  = y * w + (x_left);
+                int n_right = y * w + (x_right);
+
+                double r_up = 1. / pow(y - y_up, 2);
+                double r_down = 1. / pow(y_down - y, 2);
+                double r_left = 1. / pow(x - x_left, 2);
+                double r_right = 1. / pow(x_right - x, 2);
+                double r_sum = r_up + r_down + r_left + r_right;
+
+                double k_up = r_up / r_sum;
+                double k_down = r_down / r_sum;
+                double k_left = r_left / r_sum;
+                double k_right = r_right / r_sum;
+
+                img.r[idx] = img.r[n_up] * k_up + img.r[n_down] * k_down + img.r[n_left] * k_left + img.r[n_right] * k_right;
+                img.g[idx] = img.g[n_up] * k_up + img.g[n_down] * k_down + img.g[n_left] * k_left + img.g[n_right] * k_right;
+                img.b[idx] = img.b[n_up] * k_up + img.b[n_down] * k_down + img.b[n_left] * k_left + img.b[n_right] * k_right;
+            }
+        }
+    }
+}
+
 // Draw the mask at mouse position
 void applyBrush(Image& img, int mx, int my, bool clear=false) {
     int r2 = BRUSH_RADIUS * BRUSH_RADIUS;
@@ -172,6 +213,7 @@ void applyBrush(Image& img, int mx, int my, bool clear=false) {
             }
         }
     }
+    if (clear && useFill) fillMask(img);
 }
 
 void loadMask(Image& img, Image& mask) {
@@ -180,6 +222,7 @@ void loadMask(Image& img, Image& mask) {
             img.mask[i] = true;
         }
     }
+    fillMask(img);
 }
 
 // 1. LAPLACE SOLVER (Membrane)
@@ -244,7 +287,7 @@ void solveBiharmonicStep(Image& img) {
                     double sum_n = c[n_up] + c[n_down] + c[n_left] + c[n_right];
                     double sum_d = c[n_ul] + c[n_ur] + c[n_dl] + c[n_dr];
                     double sum_f = c[n_up2] + c[n_down2] + c[n_left2] + c[n_right2];
-                    return (8.0 * sum_n - 2.0 * sum_d - 1.0 * sum_f) / 20.0;
+                    return std::clamp((4.0 * sum_n - 1.0 * sum_d - 0.5 * sum_f) / 10.0, 0.0, 255.0);
                 };
 
                 img.r[idx] = computeChannel(img.r);
@@ -271,8 +314,8 @@ int main(int argc, char* argv[]) {
         for(int y=0; y<600; y++) 
             for(int x=0; x<800; x++) {
                 int idx = y*800+x;
-                image.r[idx] = (double)x * 255.0/800.0;
-                image.g[idx] = (double)y * 255.0/600.0;
+                image.r[idx] = fmod((double)x * 255.0/200.0, 255.);
+                image.g[idx] = fmod((double)y * 255.0/200.0, 255.);
                 image.b[idx] = 128.0;
             }
     }
@@ -302,7 +345,7 @@ int main(int argc, char* argv[]) {
     bool quit = false;
     bool isLeftMouseDown = false;
     bool isSolving = false;
-    bool useBiharmonic = false; // Toggle state
+    bool useBiharmonic = false;
     bool textureNeedsUpdate = true;
 
     SDL_Event e;
@@ -370,6 +413,10 @@ int main(int argc, char* argv[]) {
                             "SDL3 Inpainting - Mode: Laplace (Gradient)");
                         std::cout << "Algorithm: " << (useBiharmonic ? "Biharmonic" : "Laplace") << std::endl;
                         break;
+                    case SDLK_F:
+                        useFill = !useFill;
+                        std::cout << "Algorithm: " << (useFill ? "Fill" : (useBiharmonic ? "Biharmonic" : "Laplace")) << std::endl;
+                        break;
                 }
             }
         }
@@ -378,9 +425,11 @@ int main(int argc, char* argv[]) {
         if (isSolving) {
             // Biharmonic is heavier, so we might do fewer iterations to keep FPS up
             // or just do the same amount if the CPU is fast enough.
-            int iterations = 40; 
+            int iterations = useFill ? 1 : (useBiharmonic ? 5 : 40);
             for (int k = 0; k < iterations; ++k) {
-                if (useBiharmonic) {
+                if (useFill) {
+                    fillMask(image);
+                } else if (useBiharmonic) {
                     solveBiharmonicStep(image);
                 } else {
                     solveLaplaceStep(image);
