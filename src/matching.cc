@@ -20,7 +20,9 @@ using std::endl;
 
 int count = 0;
 long total_count = 0;
+double step_diff = 0;
 double total_diff = 0;
+bool last = false;
 int radius = 1;
 
 void update_image(int steps);
@@ -40,9 +42,16 @@ inline void unpack_rgba(uint32_t p, uint8_t &r, uint8_t &g, uint8_t &b) {
 
 void save_image(int step) {
     char s[100];
-    sprintf(s, "frames/%04d.png", step);
-    IMG_SavePNG(global_data.surf, s);
+    sprintf(s, "frames/%04d.jpg", step);
+    IMG_SaveJPG(global_data.surf, s, 90);
 
+}
+
+bool in_args(const std::string& arg, int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i] == arg) return true;
+    }
+    return false;
 }
 
 int main(int argc, char* argv[]) {
@@ -67,7 +76,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) {
         source = argv[1];
         dest = argv[2];
-        if (argc > 3 && std::string(argv[3]) == "--reverse") {
+        if (in_args("--reverse", argc, argv)) {
             std::swap(source, dest);
         }
     } else {
@@ -92,6 +101,7 @@ int main(int argc, char* argv[]) {
     double high = 200;
     double low = 10;
     double mid = 60;
+    save_image(step);
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) {
@@ -100,23 +110,31 @@ int main(int argc, char* argv[]) {
         }
         update_image(steps);
         SDL_RenderPresent(global_data.ren);
-        if (SDL_GetTicks() - t > 1000) {
-            std::cout << count << " steps per second\n";
+        int interval = 100;
+        if (SDL_GetTicks() - t > interval) {
+            std::cout << (int)round(count * 1000. / interval) << " steps per second\n";
             printf("%d steps per iteration\n", steps);
-            double its = count / (double)steps;
+            double its = count / (double)steps * 1000 / interval;
             printf("%d iterations per second\n", (int)round(its));
-            std::cout << "Diff: " << std::endl << total_diff << std::endl;
+            std::cout << "Diff: " << std::endl << step_diff << std::endl;
             std::cout << "Radius: " << std::endl << radius << std::endl;
-            if (total_diff < global_data.surf->w * global_data.surf->h) {
-                radius += std::max(1, radius / 5);
+            if (total_diff > (global_data.surf->w * global_data.surf->h) / 10.) {
+                save_image(step + 1);
+                total_diff = 0;
+            }
+            if (step_diff < (global_data.surf->w * global_data.surf->h) / 500. && !last) {
                 save_image(step);
+                last = true;
+            }
+            if (step_diff < global_data.surf->w * global_data.surf->h) {
+                radius += std::max(1, radius / 5);
             }
             int shortest = std::min(global_data.surf->h, global_data.surf->w);
             if (radius >= shortest) {
                 radius = (radius % shortest) + 1;
             }
-            total_diff = 0;
-            SDL_SetWindowTitle(win, std::to_string(count).c_str());
+            step_diff = 0;
+            SDL_SetWindowTitle(win, std::to_string((int)(count * 1000. / interval)).c_str());
             if (step == 0) {
                 high = its;
                 steps = round(steps * (its / low));
@@ -183,10 +201,10 @@ void update_image(int steps) {
     unsigned int* pixels2 = (unsigned int*)global_data.surf2->pixels;
     SDL_FRect r = {0, 0, (float)w, (float)h};
     for (int i = 0; i < steps; i++) {
-        // int y = rand() % h;
-        // int x = rand() % w;
-        int x = ((int)total_count / h) % w;
-        int y = (int)total_count % h;
+        int x = rand() % w;
+        int y = rand() % h;
+        // int x = ((int)total_count / h) % w;
+        // int y = (int)total_count % h;
         int dx = rand() % radius + 1;
         // dx = radius;
         int dy = rand() % radius + 1;
@@ -226,6 +244,7 @@ void update_image(int steps) {
         } else if (max_d == d4){
             std::swap(*c, *c4);
         }
+        step_diff += max_d;
         total_diff += max_d;
         ++count;
         ++total_count;

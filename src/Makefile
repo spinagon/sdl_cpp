@@ -10,7 +10,7 @@ BUILD_DIR = .
 
 all: main.exe graph.exe sort.exe circle.exe clustering.exe inpaint.exe
 
-%.exe: %.o hsluv.o
+%.exe: %.o
 	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 %.o: %.cc
