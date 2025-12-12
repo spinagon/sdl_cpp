@@ -6,6 +6,7 @@
 #include <random>
 #include <chrono>
 #include <cstring>
+#include <list>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
@@ -18,12 +19,19 @@
 using std::cout;
 using std::endl;
 
+int argc;
+char** argv;
+
 int count = 0;
 long total_count = 0;
 double step_diff = 0;
 double total_diff = 0;
 bool last = false;
 int radius = 1;
+
+double sim(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2);
+double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2);
+std::list<double (*)(unsigned int*, int, int, int, int, unsigned int*)> sim_functions {sim, sim_blur};
 
 void update_image(int steps);
 
@@ -47,20 +55,23 @@ void save_image(int step) {
 
 }
 
-bool in_args(const std::string& arg, int argc, char* argv[]) {
+bool in_args(const std::string& arg) {
     for (int i = 1; i < argc; ++i) {
         if (argv[i] == arg) return true;
     }
     return false;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc_, char* argv_[]) {
+    argc = argc_;
+    argv = argv_;
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window *win = SDL_CreateWindow("", 800, 600, SDL_WINDOW_RESIZABLE);
+    SDL_Window *win;
+    SDL_Renderer *ren;
+    SDL_CreateWindowAndRenderer("", 800, 600, SDL_WINDOW_RESIZABLE, &win, &ren);
     for (int i = 0; i < SDL_GetNumRenderDrivers(); ++i) {
         std::cout << SDL_GetRenderDriver(i) << "\n";
     }
-    SDL_Renderer *ren = SDL_CreateRenderer(win, "direct3d");
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
     srand(time(NULL));
@@ -76,7 +87,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) {
         source = argv[1];
         dest = argv[2];
-        if (in_args("--reverse", argc, argv)) {
+        if (in_args("--reverse")) {
             std::swap(source, dest);
         }
     } else {
@@ -97,17 +108,23 @@ int main(int argc, char* argv[]) {
     save_image(step);
     while (!quit) {
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_QUIT) {
-                quit = 1;
+            if (e.type == SDL_EVENT_QUIT) quit = 1;
+            if (e.type == SDL_EVENT_KEY_DOWN) {
+                if (e.key.key == SDLK_Q) quit = 1;
+                if (e.key.key == SDLK_B) {
+                    sim_functions.push_back(*sim_functions.front());
+                    sim_functions.pop_front();
+                }
             }
         }
         update_image(steps);
         SDL_RenderPresent(global_data.ren);
         int interval = 100;
-        if (SDL_GetTicks() - t > interval) {
-            std::cout << (int)round(count * 1000. / interval) << " steps per second\n";
+        double passed;
+        if ((passed = SDL_GetTicks() - t) > interval) {
+            std::cout << (int)round(count * 1000 / passed) << " steps per second\n";
             printf("%d steps per iteration\n", steps);
-            double its = count / (double)steps * 1000 / interval;
+            double its = count / (double)steps * 1000 / passed;
             printf("%d iterations per second\n", (int)round(its));
             std::cout << "Diff: " << std::endl << step_diff << std::endl;
             std::cout << "Radius: " << std::endl << radius << std::endl;
@@ -125,7 +142,7 @@ int main(int argc, char* argv[]) {
                 radius = std::min(radius, shortest - 1);
             }
             step_diff = 0;
-            SDL_SetWindowTitle(win, std::to_string((int)(count * 1000. / interval)).c_str());
+            SDL_SetWindowTitle(win, std::to_string((int)(count * 1000 / passed)).c_str());
             if (step == 0) {
                 high = its;
                 steps = round(steps * (its / low));
@@ -192,6 +209,7 @@ double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned i
         clip((y1 - 1) * w + x1 + 1),
         clip((y1) * w + x1 - 1),
         clip((y2) * w + x2),
+        clip((y2) * w + x2),
         clip((y1) * w + x1 + 1),
         clip((y1 + 1) * w + x1 - 1),
         clip((y1 + 1) * w + x1),
@@ -204,9 +222,9 @@ double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned i
         g += g1;
         b += b1;
     }
-    r /= 9;
-    g /= 9;
-    b /= 9;
+    r /= 10;
+    g /= 10;
+    b /= 10;
     return diff((int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000, pixels2[clip(y1 * w + x1)]);
     return (int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000;
 }
@@ -225,14 +243,14 @@ void update_image(int steps) {
         // int x = ((int)total_count / h) % w;
         // int y = (int)total_count % h;
         int dx = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
-        // dx = radius;
+        // int dx = radius;
         int dy = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
-        // dy = radius;
+        // int dy = radius;
         int x1 = std::clamp(x + dx, 0, w - 1);
         int y1 = std::clamp(y + dy, 0, h - 1);
         unsigned int* c = &pixels[clip(y * w + x)];
         unsigned int* c1 = &pixels[clip(y1 * w + x1)];
-        auto sim_f = sim;
+        auto sim_f = *sim_functions.front();
         double orig = sim_f(pixels, x, y, x, y, pixels2);
         double d1 = (orig + sim_f(pixels, x1, y1, x1, y1, pixels2)) - (sim_f(pixels, x1, y1, x, y, pixels2) + sim_f(pixels, x, y, x1, y1, pixels2));
         if (d1 > 0) {
