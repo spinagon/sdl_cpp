@@ -85,13 +85,6 @@ int main(int argc, char* argv[]) {
     }
     global_data.surf = SDL_ConvertSurface(IMG_Load(source.c_str()), SDL_PIXELFORMAT_RGBA32);
     global_data.surf2 = SDL_ConvertSurface(IMG_Load(dest.c_str()), SDL_PIXELFORMAT_RGBA32);
-    // if (argc > 1) {
-    //     global_data.surf = SDL_ConvertSurface(IMG_Load(argv[1]), SDL_PIXELFORMAT_RGBA32);
-    //     global_data.surf2 = SDL_ConvertSurface(IMG_Load(argv[2]), SDL_PIXELFORMAT_RGBA32);
-    // } else {
-    //     global_data.surf = SDL_ConvertSurface(IMG_Load("C:/china.jpg"), SDL_PIXELFORMAT_RGBA32);
-    //     global_data.surf2 = SDL_ConvertSurface(IMG_Load("C:/!Drv/docs/CSS/interactive-examples.mdn.mozilla.net/media/examples/balloon-small.jpg"), SDL_PIXELFORMAT_RGBA32);
-    // }
     global_data.surf = SDL_ScaleSurface(global_data.surf, global_data.surf2->w, global_data.surf2->h, SDL_SCALEMODE_LINEAR);
     SDL_Texture* tex = SDL_CreateTexture(global_data.ren,
         SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
@@ -128,10 +121,8 @@ int main(int argc, char* argv[]) {
             }
             if (step_diff < global_data.surf->w * global_data.surf->h) {
                 radius += std::max(1, radius / 5);
-            }
-            int shortest = std::min(global_data.surf->h, global_data.surf->w);
-            if (radius >= shortest) {
-                radius = (radius % shortest) + 1;
+                int shortest = std::min(global_data.surf->h, global_data.surf->w);
+                radius = std::min(radius, shortest - 1);
             }
             step_diff = 0;
             SDL_SetWindowTitle(win, std::to_string((int)(count * 1000. / interval)).c_str());
@@ -185,11 +176,39 @@ int clip(int n) {
     return (n + n_pixels) % n_pixels;
 }
 
-double sim(unsigned int* pixels, int x, int y, unsigned int c) {
+double sim(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2) {
     int h = global_data.surf->h;
     int w = global_data.surf->w;
-    double d = diff(c, pixels[clip(y * w + x)]);
+    double d = diff(pixels2[clip(y2 * w + x2)], pixels[clip(y1 * w + x1)]);
     return d;
+}
+
+double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2) {
+    double r = 0, g = 0, b = 0;
+    int w = global_data.surf->w;
+    std::vector<int> coords {
+        clip((y1 - 1) * w + x1 - 1),
+        clip((y1 - 1) * w + x1),
+        clip((y1 - 1) * w + x1 + 1),
+        clip((y1) * w + x1 - 1),
+        clip((y2) * w + x2),
+        clip((y1) * w + x1 + 1),
+        clip((y1 + 1) * w + x1 - 1),
+        clip((y1 + 1) * w + x1),
+        clip((y1 + 1) * w + x1 + 1)
+    };
+    for (auto i : coords) {
+        uint8_t r1, g1, b1;
+        unpack_rgba(pixels[i], r1, g1, b1);
+        r += r1;
+        g += g1;
+        b += b1;
+    }
+    r /= 9;
+    g /= 9;
+    b /= 9;
+    return diff((int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000, pixels2[clip(y1 * w + x1)]);
+    return (int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000;
 }
 
 void update_image(int steps) {
@@ -205,47 +224,22 @@ void update_image(int steps) {
         int y = rand() % h;
         // int x = ((int)total_count / h) % w;
         // int y = (int)total_count % h;
-        int dx = rand() % radius + 1;
+        int dx = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
         // dx = radius;
-        int dy = rand() % radius + 1;
+        int dy = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
         // dy = radius;
-        int x1 = x + dx;
-        int x2 = x - dx;
-        int x3 = x - dx;
-        int x4 = x + dx;
-        int y1 = y + dy;
-        int y2 = y - dy;
-        int y3 = y + dy;
-        int y4 = y - dy;
+        int x1 = std::clamp(x + dx, 0, w - 1);
+        int y1 = std::clamp(y + dy, 0, h - 1);
         unsigned int* c = &pixels[clip(y * w + x)];
         unsigned int* c1 = &pixels[clip(y1 * w + x1)];
-        unsigned int* c2 = &pixels[clip(y2 * w + x2)];
-        unsigned int* c3 = &pixels[clip(y3 * w + x3)];
-        unsigned int* c4 = &pixels[clip(y4 * w + x4)];
-        double orig = sim(pixels2, x, y, *c);
-        double d1 = (orig + sim(pixels2, x1, y1, *c1)) - (sim(pixels2, x1, y1, *c) + sim(pixels2, x, y, *c1));
-        double d2 = (orig + sim(pixels2, x2, y2, *c2)) - (sim(pixels2, x2, y2, *c) + sim(pixels2, x, y, *c2));
-        double d3 = (orig + sim(pixels2, x3, y3, *c3)) - (sim(pixels2, x3, y3, *c) + sim(pixels2, x, y, *c3));
-        double d4 = (orig + sim(pixels2, x4, y4, *c4)) - (sim(pixels2, x4, y4, *c) + sim(pixels2, x, y, *c4));
-        double d0 = 0;
-        double max_d;
-        max_d = std::max({d0, d1, d2, d3, d4});
-        // double diffs[] {d1, d2, d3, d4, d5};
-        // std::sort(&diffs[0], &diffs[5]);
-        // max_d = diffs[2];
-        if (max_d == d0) {
-            // pass;
-        } else if (max_d == d1) {
+        auto sim_f = sim;
+        double orig = sim_f(pixels, x, y, x, y, pixels2);
+        double d1 = (orig + sim_f(pixels, x1, y1, x1, y1, pixels2)) - (sim_f(pixels, x1, y1, x, y, pixels2) + sim_f(pixels, x, y, x1, y1, pixels2));
+        if (d1 > 0) {
             std::swap(*c, *c1);
-        } else if (max_d == d2) {
-            std::swap(*c, *c2);
-        } else if (max_d == d3) {
-            std::swap(*c, *c3);
-        } else if (max_d == d4){
-            std::swap(*c, *c4);
+            step_diff += d1;
+            total_diff += d1;
         }
-        step_diff += max_d;
-        total_diff += max_d;
         ++count;
         ++total_count;
     }
