@@ -126,6 +126,52 @@ public:
     }
 };
 
+class YcbcrImage : public Image {
+public:
+    YcbcrImage() : Image() {}
+
+    virtual void fromSurface(SDL_Surface* surf) {
+        this->init(surf->w, surf->h);
+
+        uint32_t* pixels = (uint32_t*)surf->pixels;
+        
+        for (int i = 0; i < this->w * this->h; ++i) {
+            uint32_t p = pixels[i];
+            
+            uint8_t r = (p >> 16) & 0xFF;
+            uint8_t g = (p >> 8) & 0xFF;
+            uint8_t b = (p >> 0)  & 0xFF;
+
+            this->r[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+            this->g[i] = 0.564 * (b - this->r[i]);
+            this->b[i] = 0.713 * (r - this->r[i]);
+
+            this->mask[i] = false;
+        }
+    }
+
+    virtual void toPixels(void* pixels, int pitch) {
+        uint8_t* bytePixels = (uint8_t*)pixels;
+        for (int y = 0; y < this->h; ++y) {
+            uint32_t* row = (uint32_t*)(bytePixels + y * pitch);
+            for (int x = 0; x < this->w; ++x) {
+                int idx = y * this->w + x;
+                
+                double rd, gd, bd;
+                rd = this->b[idx] / 0.713 + this->r[idx];
+                bd = this->g[idx] / 0.564 + this->r[idx];
+                gd = (this->r[idx] - 0.299 * rd - 0.114 * bd) / 0.587;
+
+                uint8_t r = (uint8_t)(std::clamp(rd, 0.0, 255.0));
+                uint8_t g = (uint8_t)(std::clamp(gd, 0.0, 255.0));
+                uint8_t b = (uint8_t)(std::clamp(bd, 0.0, 255.0));
+                
+                row[x] = (255 << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+};
+
 // Helper: Load image from disk and convert to FloatImage
 bool loadImage(const std::string& path, Image& img) {
     SDL_Surface* loadedSurface = IMG_Load(path.c_str());
@@ -304,7 +350,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    FloatImage image;
+    YcbcrImage image;
     std::string imagePath = "c:/china.jpg"; // Default
     if (argc > 1) imagePath = argv[1];
     
