@@ -15,6 +15,9 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_surface.h>
+#include <SDL3/SDL_render.h>
+
+#define DBG(arg) std::cout << #arg << ": " << arg << std::endl;
 
 using std::cout;
 using std::endl;
@@ -27,11 +30,10 @@ long total_count = 0;
 double step_diff = 0;
 double total_diff = 0;
 bool last = false;
-int radius = 1;
 
-double sim(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2);
-double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2);
-std::list<double (*)(unsigned int*, int, int, int, int, unsigned int*)> sim_functions {sim, sim_blur};
+double sim(unsigned int* pixels, unsigned int* pixels2);
+double sim_blur(unsigned int* pixels, unsigned int* pixels2);
+std::list<double (*)(unsigned int*, unsigned int*)> sim_functions {sim, sim_blur};
 
 void update_image(int steps);
 
@@ -78,7 +80,7 @@ int main(int argc_, char* argv_[]) {
     srand(time(NULL));
     SDL_Event e;
     int quit = 0;
-    int steps = 1000;
+    int steps = 1;
     int t = SDL_GetTicks();
     int mode = 0;
     int h = 300;
@@ -119,7 +121,6 @@ int main(int argc_, char* argv_[]) {
                 }
                 if (e.key.key == SDLK_R) {
                     std::swap(global_data.surf2, global_data.surf_original);
-                    radius = 1;
                 }
             }
         }
@@ -133,19 +134,13 @@ int main(int argc_, char* argv_[]) {
             double its = count / (double)steps * 1000 / passed;
             printf("%d iterations per second\n", (int)round(its));
             std::cout << "Diff: " << std::endl << step_diff << std::endl;
-            std::cout << "Radius: " << std::endl << radius << std::endl;
-            if (total_diff > (global_data.surf->w * global_data.surf->h) / 10.) {
+            if (total_diff > (global_data.surf->w * global_data.surf->h) * 4.) {
                 save_image(step + 1);
                 total_diff = 0;
             }
             if (step_diff < (global_data.surf->w * global_data.surf->h) / 500. && !last) {
-                save_image(step);
+                // save_image(step);
                 last = true;
-            }
-            if (step_diff < global_data.surf->w * global_data.surf->h) {
-                radius += std::max(1, radius / 5);
-                int shortest = std::min(global_data.surf->h, global_data.surf->w);
-                radius = std::min(radius, shortest - 1);
             }
             step_diff = 0;
             SDL_SetWindowTitle(win, std::to_string((int)(count * 1000 / passed)).c_str());
@@ -199,40 +194,24 @@ int clip(int n) {
     return (n + n_pixels) % n_pixels;
 }
 
-double sim(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2) {
+double sim(unsigned int* pixels, unsigned int* pixels2) {
     int h = global_data.surf->h;
     int w = global_data.surf->w;
-    double d = diff(pixels2[clip(y2 * w + x2)], pixels[clip(y1 * w + x1)]);
-    return d;
+    double sum = 0;
+    for (int i = 0; i < h * w; i += 2) {
+        sum += diff(pixels[i], pixels2[i]);
+    }
+    return sum;
 }
 
-double sim_blur(unsigned int* pixels, int x1, int y1, int x2, int y2, unsigned int* pixels2) {
-    double r = 0, g = 0, b = 0;
+double sim_blur(unsigned int* pixels, unsigned int* pixels2) {
+    int h = global_data.surf->h;
     int w = global_data.surf->w;
-    std::vector<int> coords {
-        clip((y1 - 1) * w + x1 - 1),
-        clip((y1 - 1) * w + x1),
-        clip((y1 - 1) * w + x1 + 1),
-        clip((y1) * w + x1 - 1),
-        clip((y2) * w + x2),
-        clip((y2) * w + x2),
-        clip((y1) * w + x1 + 1),
-        clip((y1 + 1) * w + x1 - 1),
-        clip((y1 + 1) * w + x1),
-        clip((y1 + 1) * w + x1 + 1)
-    };
-    for (auto i : coords) {
-        uint8_t r1, g1, b1;
-        unpack_rgba(pixels[i], r1, g1, b1);
-        r += r1;
-        g += g1;
-        b += b1;
+    double sum = 0;
+    for (int i = 0; i < h * w; ++i) {
+        sum += diff(pixels[i], pixels2[i]);
     }
-    r /= 10;
-    g /= 10;
-    b /= 10;
-    return diff((int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000, pixels2[clip(y1 * w + x1)]);
-    return (int)r | ((int)g << 8) | ((int)b << 16) | 0xFF000000;
+    return sum;
 }
 
 void update_image(int steps) {
@@ -242,27 +221,26 @@ void update_image(int steps) {
     int w = global_data.surf->w;
     unsigned int* pixels = (unsigned int*)surf->pixels;
     unsigned int* pixels2 = (unsigned int*)global_data.surf2->pixels;
+    unsigned int* pixels3 = (unsigned int*)global_data.surf_original->pixels;
     SDL_FRect r = {0, 0, (float)w, (float)h};
     for (int i = 0; i < steps; i++) {
+        auto sim_f = *sim_functions.front();
+        double orig = sim_f(pixels, pixels2);
         int x = rand() % w;
         int y = rand() % h;
-        // int x = ((int)total_count / h) % w;
-        // int y = (int)total_count % h;
-        int dx = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
-        // int dx = radius;
-        int dy = (rand() % radius + 1) * ((rand() % 2) * 2 - 1);
-        // int dy = radius;
-        int x1 = std::clamp(x + dx, 0, w - 1);
-        int y1 = std::clamp(y + dy, 0, h - 1);
-        unsigned int* c = &pixels[clip(y * w + x)];
-        unsigned int* c1 = &pixels[clip(y1 * w + x1)];
-        auto sim_f = *sim_functions.front();
-        double orig = sim_f(pixels, x, y, x, y, pixels2);
-        double d1 = (orig + sim_f(pixels, x1, y1, x1, y1, pixels2)) - (sim_f(pixels, x1, y1, x, y, pixels2) + sim_f(pixels, x, y, x1, y1, pixels2));
-        if (d1 > 0) {
-            std::swap(*c, *c1);
-            step_diff += d1;
-            total_diff += d1;
+        int x1 = rand() % w;
+        int y1 = rand() % h;
+        SDL_Renderer* ren2 = SDL_CreateSoftwareRenderer(surf);
+        SDL_SetRenderDrawColor(ren2, rand() % 255, rand() % 255, rand() % 255, 255);
+        SDL_RenderLine(ren2, x, y, x1, y1);
+        SDL_DestroyRenderer(ren2);
+        double d1 = sim_f(pixels, pixels2);
+        if (d1 < orig) {
+            std::copy_n(pixels, h * w, pixels3);
+            step_diff += orig - d1;
+            total_diff += orig - d1;
+        } else {
+            std::copy_n(pixels3, h * w, pixels);
         }
         ++count;
         ++total_count;
