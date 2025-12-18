@@ -169,23 +169,16 @@ int main(int argc_, char* argv_[]) {
     return 0;
 }
 
-double diff(unsigned int p1, unsigned int p2) {
+int diff(unsigned int p1, unsigned int p2) {
     unsigned char r1, g1, b1, r2, g2, b2;
     unpack_rgba(p1, r1, g1, b1);
     unpack_rgba(p2, r2, g2, b2);
 
-    double y1 = 0.299*r1 + 0.587*g1 + 0.114*b1;
-    double cb1 = 0.564*(b1 - y1);
-    double cr1 = 0.713*(r1 - y1);
-    double y2 = 0.299*r2 + 0.587*g2 + 0.114*b2;
-    double cb2 = 0.564*(b2 - y2);
-    double cr2 = 0.713*(r2 - y2);
+    int dr = r1 - r2;
+    int dg = g1 - g2;
+    int db = b1 - b2;
 
-    double dy = y1 - y2;
-    double dcb = cb1 - cb2;
-    double dcr = cr1 - cr2;
-
-    return sqrt(dy*dy + 0.5*(dcb*dcb + dcr*dcr));
+    return 3 * dr * dr + 4 * dg * dg + 2 * db * db;
 }
 
 
